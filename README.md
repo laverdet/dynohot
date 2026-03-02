@@ -41,7 +41,7 @@ export const now = new Date();
 ```
 $ while true; do sleep 1; touch now.js; done &
 
-$ node --import dynohot/register main.js
+$ node --import dynohot main.js
 [hot] Loaded 1 new module, reevaluated 0 existing modules in 2ms.
 2023-08-07T23:49:45.693Z
 [hot] Loaded 1 new module, reevaluated 0 existing modules in 2ms.
