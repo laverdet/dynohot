@@ -45,9 +45,9 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/braidnetworks/dynohot.git"
+		"url": "git+https://github.com/laverdet/dynohot.git"
 	},
-	"author": "https://github.com/braidnetworks/",
+	"author": "https://github.com/laverdet",
 	"license": "ISC",
-	"homepage": "https://github.com/braidnetworks/dynohot#readme"
+	"homepage": "https://github.com/laverdet/dynohot#readme"
 }
