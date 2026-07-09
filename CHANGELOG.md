@@ -1,5 +1,11 @@
 # dynohot
 
+## 2.1.2
+
+### Patch Changes
+
+- 15ec4cd: Fix optional member keys matching import name
+
 ## 2.1.1
 
 ### Patch Changes
