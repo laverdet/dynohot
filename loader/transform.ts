@@ -1,4 +1,4 @@
-import type { NodePath, Visitor } from "@babel/traverse";
+import type { Node, NodePath, VisitNode, Visitor } from "@babel/traverse";
 import type { BindingEntry } from "dynohot/runtime/binding";
 import type { ImportAttributes } from "node:module";
 import * as assert from "node:assert/strict";
@@ -394,6 +394,18 @@ interface VisitorState {
 	usesTopLevelAwait: boolean;
 }
 
+interface HasComputedKey { computed?: boolean }
+
+const skipKeyOf = <State, NodeOf extends Node>(property: keyof NodeOf & string): VisitNode<State, NodeOf> => path => {
+	path.skipKey(property);
+};
+
+const skipNotComputedKeyOf = <State, NodeOf extends Node & HasComputedKey>(property: keyof NodeOf & string): VisitNode<State, NodeOf> => path => {
+	if (!path.node.computed) {
+		path.skipKey(property);
+	}
+};
+
 const importToGetterVisitor: Visitor<VisitorState> = {
 	// Look for top-level await
 	AwaitExpression(path) {
@@ -438,33 +450,14 @@ const importToGetterVisitor: Visitor<VisitorState> = {
 		}
 	},
 
-	ClassMethod(path) {
-		if (!path.node.computed) {
-			path.skipKey("key");
-		}
-	},
+	LabeledStatement: skipKeyOf("label"),
 
-	ClassProperty(path) {
-		if (!path.node.computed) {
-			path.skipKey("key");
-		}
-	},
-
-	LabeledStatement(path) {
-		path.skipKey("label");
-	},
-
-	MemberExpression(path) {
-		if (!path.node.computed) {
-			path.skipKey("property");
-		}
-	},
-
-	ObjectMethod(path) {
-		if (!path.node.computed) {
-			path.skipKey("key");
-		}
-	},
+	ClassAccessorProperty: skipNotComputedKeyOf("key"),
+	ClassMethod: skipNotComputedKeyOf("key"),
+	ClassProperty: skipNotComputedKeyOf("key"),
+	MemberExpression: skipNotComputedKeyOf("property"),
+	ObjectMethod: skipNotComputedKeyOf("key"),
+	OptionalMemberExpression: skipNotComputedKeyOf("property"),
 
 	ObjectProperty(path) {
 		if (!path.node.computed && t.isIdentifier(path.node.key)) {

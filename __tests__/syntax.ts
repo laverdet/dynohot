@@ -27,3 +27,10 @@ await test("string literal imports don't collide", () => {
 		import dash2 from '-';
 		import bang from '!';`);
 });
+
+await test("optional chain syntax", () => {
+	parses(
+		`import child from "child";
+		const nothing = undefined;
+		const select = nothing?.child ?? child;`);
+});
