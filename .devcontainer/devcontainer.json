@@ -1,0 +1,36 @@
+{
+	"name": "dynohot",
+	"dockerFile": "Dockerfile",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"dbaeumer.vscode-eslint"
+			],
+			"settings": {
+				"terminal.integrated.defaultProfile.linux": "bash",
+				"terminal.integrated.profiles.linux": {
+					"bash": {
+						"path": "bash",
+						"args": [ "-l" ],
+						"icon": "terminal-bash"
+					}
+				}
+			}
+		}
+	},
+	"mounts": [
+		"source=/etc/localtime,target=/etc/localtime,type=bind,readonly"
+	],
+	"features": {
+		"ghcr.io/devcontainers/features/node:2": {
+			"nodeGypDependencies": false,
+			"pnpmVersion": "latest",
+			"version": "26"
+		}
+	},
+	// '_devcontainer_init' may be defined by dotfiles. this is different than the 'install' script
+	// because dotfiles runs before the repo is setup.
+	"postStartCommand": [ "/bin/sh", "-cl", "which -s _devcontainer_init && _devcontainer_init || true" ],
+	"workspaceMount": "source=${localWorkspaceFolder},target=/dynohot,type=bind",
+	"workspaceFolder": "/dynohot"
+}
