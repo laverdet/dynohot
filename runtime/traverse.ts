@@ -126,6 +126,7 @@ export function traverseDepthFirst<
 			if (hasPromise) {
 				return {
 					sync: false,
+					// eslint-disable-next-line @typescript-eslint/await-thenable
 					promise: Promise.all(forwardResultsMaybePromise),
 				};
 			} else {
@@ -161,6 +162,7 @@ export function traverseDepthFirst<
 						promise: async function() {
 							let forwardResults: Result[];
 							try {
+								// eslint-disable-next-line @typescript-eslint/await-thenable
 								forwardResults = collect(nodeIndex, await Promise.all(cyclicForwardResults));
 							} catch (error) {
 								unwind?.(cycleNodes);

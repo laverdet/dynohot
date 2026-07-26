@@ -282,9 +282,7 @@ export class ReloadableModuleController implements AbstractModuleController {
 				node => node.traversal,
 				(node, traversal) => {
 					node.traversal = traversal;
-					if (node.current === undefined) {
-						node.current = node.select(controller => controller.staging);
-					}
+					node.current ??= node.select(controller => controller.staging);
 					return node.iterate();
 				},
 				cycleNodes => maybeThen(function*() {
@@ -728,7 +726,7 @@ export class ReloadableModuleController implements AbstractModuleController {
 					// 3) Evaluate
 					const maybe = maybeAll(Fn.map(cycleNodes, node => maybeThen(function*() {
 						const current = node.select();
-						if (node.previous !== undefined && current.declaration === node.previous.declaration) {
+						if (current.declaration === node.previous?.declaration) {
 							++reevaluations;
 						} else {
 							++loads;
@@ -820,9 +818,7 @@ export class ReloadableModuleController implements AbstractModuleController {
 						return this.fatalError = { type: UpdateStatus.fatalError, error };
 					}
 					// Move the instance to staging to setup for `dispatch` in case it's re-imported
-					if (controller.staging === undefined) {
-						controller.staging = current.clone();
-					}
+					controller.staging ??= current.clone();
 					controller.current = undefined;
 					controller.previous = undefined;
 				}
