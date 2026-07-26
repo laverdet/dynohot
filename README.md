@@ -207,29 +207,8 @@ PATTERNS
 ### Swappable middleware [Express, Koa, etc]
 ```ts
 import express from "express";
+import { makeSwappableMiddleware } from "dynohot/utilities/middleware";
 import yourMiddleware from "./your-middleware.js";
-
-// Reusable utility function
-function makeSwappableMiddleware<Middleware extends (...args: readonly any[]) => any>(
-    initial: Middleware,
-): [
-    swap: (next: Middleware) => void,
-    middleware: Middleware,
-] {
-    if (import.meta.hot) {
-        let current = initial;
-        const swap = (next: Middleware) => {
-            current = next;
-        };
-        const middleware = ((...args) => current(...args)) as Middleware;
-        return [ swap, middleware ];
-    } else {
-        const swap = () => {
-            throw new Error("Middleware is not swappable.");
-        };
-        return [ swap, initial ];
-    }
-}
 
 // Updates to "./your-middleware.js" will be applied without needing to restart
 // an HTTP server. No overhead incurred in production.
