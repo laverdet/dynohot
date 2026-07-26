@@ -1,9 +1,9 @@
 import type { ModuleOrigin } from "./specifier.js";
-import type { ImportAttributes, InitializeHook, LoadHook, ModuleFormat, ResolveHook } from "node:module";
+import type { ImportAttributes, LoadHookSync, ModuleFormat, ResolveHookSync } from "node:module";
 import type { MessagePort } from "node:worker_threads";
 import * as assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import { Fn } from "@braidai/lang/functional";
 import convertSourceMap from "convert-source-map";
 import { LoaderHot } from "./loader-hot.js";
@@ -46,7 +46,7 @@ let port: MessagePort;
 let runtimeURL: string;
 
 /** @internal */
-export const initialize: InitializeHook<LoaderParameters> = options => {
+export const initialize = (options: LoaderParameters): void => {
 	port = options.port;
 	ignorePattern = options.ignore ?? /[/\\]node_modules[/\\]/;
 	const root = String(new URL("..", new URL(import.meta.url)));
@@ -79,16 +79,16 @@ export default function module() {
 }
 module().load(${JSON.stringify(origin.backingModuleURL)}, { async: false, execute }, null, false, "json", ${JSON.stringify(importAttributes)}, []);\n`;
 
-const makeReloadableModule = async (origin: ModuleOrigin, watch: readonly string[], source: string, importAttributes: ImportAttributes) => {
-	const sourceMap = await async function(): Promise<unknown> {
+const makeReloadableModule = (origin: ModuleOrigin, watch: readonly string[], source: string, importAttributes: ImportAttributes) => {
+	const sourceMap = function(): unknown {
 		try {
 			const map = convertSourceMap.fromComment(source);
 			return map.toObject();
 		} catch {}
 		try {
-			const map = await convertSourceMap.fromMapFileSource(
+			const map = convertSourceMap.fromMapFileSource(
 				source,
-				(fileName: string) => fs.readFile(new URL(fileName, origin.moduleURL), "utf8"));
+				(fileName: string) => fs.readFileSync(new URL(fileName, origin.moduleURL), "utf8"));
 			return map?.toObject();
 		} catch {}
 	}();
@@ -126,7 +126,7 @@ function extractResolverImportAttributes(importAttributes: ImportAttributes): Im
 }
 
 /** @internal */
-export const resolve: ResolveHook = (specifier, context, nextResolve) => {
+export const resolve: ResolveHookSync = (specifier, context, nextResolve) => {
 	// Forward root module to "hot:main"
 	if (context.parentURL === undefined) {
 		return {
@@ -150,7 +150,8 @@ export const resolve: ResolveHook = (specifier, context, nextResolve) => {
 
 	// Bail on non-hot module resolution
 	const parentModuleOrigin = extractModuleOrigin(context.parentURL);
-	const hotParam = context.importAttributes.hot;
+	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+	const hotParam = context.importAttributes?.hot;
 	if (hotParam === undefined) {
 		return nextResolve(specifier, {
 			...context,
@@ -159,15 +160,35 @@ export const resolve: ResolveHook = (specifier, context, nextResolve) => {
 	}
 
 	// Resolve hot module controller
-	return async function() {
-		const importAttributes = extractResolverImportAttributes(context.importAttributes);
+	const importAttributes = extractResolverImportAttributes(context.importAttributes);
 
-		// `import {} from "./specifier"`;
-		if (hotParam === "import") {
-			const next = await nextResolve(specifier, {
+	// `import {} from "./specifier"`;
+	if (hotParam === "import") {
+		const next = nextResolve(specifier, {
+			...context,
+			importAttributes,
+			parentURL: parentModuleOrigin?.moduleURL,
+		});
+		return {
+			...next,
+			url: makeModuleOrigin(next.url, next.importAttributes),
+			importAttributes: {
+				...importAttributes,
+				...next.importAttributes,
+				hot: next.format ?? "hot",
+			},
+		};
+	}
+
+	const hot = JSON.parse(hotParam) as HotResolverPayload;
+	switch (hot.hot) {
+		// `await import(url)`
+		case "expression": {
+			const parentModuleURL = hot.parentURL;
+			const next = nextResolve(specifier, {
 				...context,
 				importAttributes,
-				parentURL: parentModuleOrigin?.moduleURL,
+				parentURL: parentModuleURL,
 			});
 			return {
 				...next,
@@ -180,48 +201,27 @@ export const resolve: ResolveHook = (specifier, context, nextResolve) => {
 			};
 		}
 
-		const hot = JSON.parse(hotParam) as HotResolverPayload;
-		switch (hot.hot) {
-			// `await import(url)`
-			case "expression": {
-				const parentModuleURL = hot.parentURL;
-				const next = await nextResolve(specifier, {
-					...context,
-					importAttributes,
-					parentURL: parentModuleURL,
-				});
-				return {
-					...next,
-					url: makeModuleOrigin(next.url, next.importAttributes),
-					importAttributes: {
-						...importAttributes,
-						...next.importAttributes,
-						hot: next.format ?? "hot",
-					},
-				};
-			}
-
-			// Reload, from `hot.invalidate()` (or the file watcher that invokes it)
-			case "reload": {
-				return {
-					format: hot.format,
-					importAttributes: {
-						...importAttributes,
-						hot: hot.format,
-					},
-					shortCircuit: true,
-					url: makeModuleOrigin(specifier, importAttributes, hot.version),
-				};
-			}
+		// Reload, from `hot.invalidate()` (or the file watcher that invokes it)
+		case "reload": {
+			return {
+				format: hot.format,
+				importAttributes: {
+					...importAttributes,
+					hot: hot.format,
+				},
+				shortCircuit: true,
+				url: makeModuleOrigin(specifier, importAttributes, hot.version),
+			};
 		}
-	}();
+	}
 };
 
 /** @internal */
-export const load: LoadHook = (urlString, context, nextLoad) => {
+export const load: LoadHookSync = (urlString, context, nextLoad) => {
 
 	// Early bail on node_modules or CommonJS graph
-	const hotParam = context.importAttributes.hot;
+	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+	const hotParam = context.importAttributes?.hot;
 	if (hotParam === undefined) {
 		return nextLoad(urlString, context);
 	}
@@ -239,46 +239,44 @@ export const load: LoadHook = (urlString, context, nextLoad) => {
 	}
 
 	// nb: `hotParam` is the resolved format
-	return async function() {
 
-		// Request code from next loader in the chain
-		const origin = extractModuleOrigin(urlString);
-		assert.ok(origin);
-		const hot = new LoaderHot(urlString, port);
-		const importAttributes = extractResolverImportAttributes(context.importAttributes);
-		const result = await nextLoad(origin.moduleURL, {
-			...context,
-			format: function() {
-				switch (hotParam) {
-					case "commonjs":
-					case "module":
-					case "json":
-						return hotParam;
-					default:
-						return undefined;
-				}
-			}(),
-			importAttributes,
-			hot,
-		});
-
-		// Render hot module controller
-		if (!ignorePattern.test(urlString)) {
-			switch (result.format) {
-				case "json": {
-					const source = makeJsonModule(origin, asString(result.source), importAttributes);
-					return { format: "module", source };
-				}
-				case "module": {
-					const source = await makeReloadableModule(origin, hot.get(), asString(result.source), importAttributes);
-					return { format: "module", source };
-				}
-				default: break;
+	// Request code from next loader in the chain
+	const origin = extractModuleOrigin(urlString);
+	assert.ok(origin);
+	const hot = new LoaderHot(urlString, port);
+	const importAttributes = extractResolverImportAttributes(context.importAttributes);
+	const result = nextLoad(origin.moduleURL, {
+		...context,
+		format: function() {
+			switch (hotParam) {
+				case "commonjs":
+				case "module":
+				case "json":
+					return hotParam;
+				default:
+					return undefined;
 			}
-		}
+		}(),
+		importAttributes,
+		hot,
+	});
 
-		// Otherwise this is an non-hot adapter module
-		const source = makeAdapterModule(origin, importAttributes);
-		return { format: "module", source };
-	}();
+	// Render hot module controller
+	if (!ignorePattern.test(urlString)) {
+		switch (result.format) {
+			case "json": {
+				const source = makeJsonModule(origin, asString(result.source), importAttributes);
+				return { format: "module", source };
+			}
+			case "module": {
+				const source = makeReloadableModule(origin, hot.get(), asString(result.source), importAttributes);
+				return { format: "module", source };
+			}
+			default: break;
+		}
+	}
+
+	// Otherwise this is an non-hot adapter module
+	const source = makeAdapterModule(origin, importAttributes);
+	return { format: "module", source };
 };

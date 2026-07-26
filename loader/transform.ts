@@ -32,6 +32,8 @@ export function transformModuleSource(
 	sourceMap: unknown,
 ) {
 	const file = function() {
+		// eslint-disable-next-line @typescript-eslint/unbound-method
+		const { prepareStackTrace } = Error;
 		try {
 			const file = parse(sourceText, {
 				babelrc: false,
@@ -55,7 +57,7 @@ export function transformModuleSource(
 			// In nodejs v20.0+ loaders run in a separate context, so it isn't an issue there, but otherwise
 			// source maps just won't work.
 			// https://github.com/babel/babel/blob/74b5ac21d0fb516ecc8d8375cc75b4446b6c9735/packages/babel-core/src/errors/rewrite-stack-trace.ts#L140
-			delete Error.prepareStackTrace;
+			Error.prepareStackTrace = prepareStackTrace;
 		}
 	}();
 

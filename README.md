@@ -30,7 +30,7 @@ EXAMPLE
 ```js
 import { now } from "./now.js";
 setInterval(() => console.log(now), 1000);
-import.meta.hot.accept("./now.js");
+import.meta.hot?.accept("./now.js");
 ```
 
 `now.js`
