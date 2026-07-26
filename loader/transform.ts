@@ -1,13 +1,13 @@
-import type { Node, NodePath, VisitNode, Visitor } from "@babel/traverse";
+import type { NodePath, Visitor } from "@babel/traverse";
 import type { BindingEntry } from "dynohot/runtime/binding";
 import type { ImportAttributes } from "node:module";
 import * as assert from "node:assert/strict";
-import { parse, types as t } from "@babel/core";
+import { parseSync, types as t } from "@babel/core";
 import { mappedPrimitiveComparator } from "@braidai/lang/comparator";
 import { Fn } from "@braidai/lang/functional";
 import convertSourceMap from "convert-source-map";
 import { BindingType } from "dynohot/runtime/binding";
-import { generate, makeRootPath, traverse } from "./babel-shim.js";
+import { generate, makeRootPath } from "./babel-shim.js";
 
 const makeLocalGetter = (localName: string, exportName: string) =>
 	t.objectProperty(
@@ -35,18 +35,12 @@ export function transformModuleSource(
 		// eslint-disable-next-line @typescript-eslint/unbound-method
 		const { prepareStackTrace } = Error;
 		try {
-			const file = parse(sourceText, {
+			const file = parseSync(sourceText, {
 				babelrc: false,
 				configFile: false,
 				filename,
 				retainLines: true,
 				sourceType: "module",
-				parserOpts: {
-					plugins: [
-						"explicitResourceManagement",
-						"importAttributes",
-					],
-				},
 			});
 			assert.ok(file);
 			return file;
@@ -70,7 +64,6 @@ export function transformModuleSource(
 		filename: filename.replace(/(\..+?|)$/, ".hot$1"),
 		retainLines: true,
 		sourceMaps: true,
-		// @ts-expect-error -- Types are out of date? https://github.com/babel/babel/blame/c446ff85c28e117ebf3cd72cd34ef358f1077aa8/packages/babel-generator/src/index.ts#L190
 		inputSourceMap: sourceMap,
 	});
 
@@ -345,7 +338,7 @@ function transformProgram(program: NodePath<t.Program>) {
 		usesImportMeta: false,
 		usesTopLevelAwait: false,
 	};
-	traverse(program.node, importToGetterVisitor, program.scope, visitorState);
+	program.traverse(importToGetterVisitor, visitorState);
 
 	// Finally, assemble a new body with the re-written imports, import descriptors, runtime-defined
 	// default export, and module body generator
@@ -398,11 +391,11 @@ interface VisitorState {
 
 interface HasComputedKey { computed?: boolean }
 
-const skipKeyOf = <State, NodeOf extends Node>(property: keyof NodeOf & string): VisitNode<State, NodeOf> => path => {
+const skipKeyOf = <NodeOf extends t.Node>(property: keyof NodeOf & string) => (path: NodePath<NodeOf>): void => {
 	path.skipKey(property);
 };
 
-const skipNotComputedKeyOf = <State, NodeOf extends Node & HasComputedKey>(property: keyof NodeOf & string): VisitNode<State, NodeOf> => path => {
+const skipNotComputedKeyOf = <NodeOf extends t.Node & HasComputedKey>(property: keyof NodeOf & string) => (path: NodePath<NodeOf>): void => {
 	if (!path.node.computed) {
 		path.skipKey(property);
 	}
@@ -423,11 +416,13 @@ const importToGetterVisitor: Visitor<VisitorState> = {
 	},
 
 	// Look for dynamic imports
-	CallExpression(path) {
-		if (t.isImport(path.node.callee)) {
-			this.usesDynamicImport = true;
-			path.get("callee").replaceWith(t.identifier(this.importDynamicName));
-		}
+	// nb: Babel 8 parses `import()` as `ImportExpression` instead of `CallExpression` with an
+	// `Import` callee.
+	ImportExpression(path) {
+		this.usesDynamicImport = true;
+		path.replaceWith(t.callExpression(
+			t.identifier(this.importDynamicName),
+			[ path.node.source, ...path.node.options ? [ path.node.options ] : [] ]));
 	},
 
 	// Replace `import.meta`
@@ -452,14 +447,14 @@ const importToGetterVisitor: Visitor<VisitorState> = {
 		}
 	},
 
-	LabeledStatement: skipKeyOf("label"),
+	LabeledStatement: skipKeyOf<t.LabeledStatement>("label"),
 
-	ClassAccessorProperty: skipNotComputedKeyOf("key"),
-	ClassMethod: skipNotComputedKeyOf("key"),
-	ClassProperty: skipNotComputedKeyOf("key"),
-	MemberExpression: skipNotComputedKeyOf("property"),
-	ObjectMethod: skipNotComputedKeyOf("key"),
-	OptionalMemberExpression: skipNotComputedKeyOf("property"),
+	ClassAccessorProperty: skipNotComputedKeyOf<t.ClassAccessorProperty>("key"),
+	ClassMethod: skipNotComputedKeyOf<t.ClassMethod>("key"),
+	ClassProperty: skipNotComputedKeyOf<t.ClassProperty>("key"),
+	MemberExpression: skipNotComputedKeyOf<t.MemberExpression>("property"),
+	ObjectMethod: skipNotComputedKeyOf<t.ObjectMethod>("key"),
+	OptionalMemberExpression: skipNotComputedKeyOf<t.OptionalMemberExpression>("property"),
 
 	ObjectProperty(path) {
 		if (!path.node.computed && t.isIdentifier(path.node.key)) {

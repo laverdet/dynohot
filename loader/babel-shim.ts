@@ -1,7 +1,5 @@
 import type { types as t } from "@babel/core";
-import type { Node, Scope, TraverseOptions } from "@babel/traverse";
-import _generate from "@babel/generator";
-import _traverse, { Hub, NodePath } from "@babel/traverse";
+import { Hub, NodePath } from "@babel/traverse";
 
 /** @internal */
 export function makeRootPath(file: t.File) {
@@ -12,19 +10,10 @@ export function makeRootPath(file: t.File) {
 		parent: file,
 		container: file,
 		key: "program",
-	});
+	}) as NodePath<t.Program>;
 	path.setContext();
 	return path;
 }
 
 /** @internal */
-export const generate = _generate.default;
-
-/** @internal */
-export const traverse: <State>(
-	parent: Node,
-	opts: TraverseOptions<State>,
-	scope: Scope | undefined,
-	state: State,
-	parentPath?: NodePath
-) => void = _traverse.default;
+export { default as generate } from "@babel/generator";
