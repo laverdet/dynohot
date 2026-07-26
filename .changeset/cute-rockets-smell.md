@@ -1,5 +1,0 @@
----
-"dynohot": patch
----
-
-update babel
