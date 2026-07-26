@@ -1,5 +1,16 @@
 # dynohot
 
+## 2.2.0
+
+### Minor Changes
+
+- a891dea: distribute makeSwappableMiddleware utility
+- 5c0eb93: update for nodejs v26
+
+### Patch Changes
+
+- 32fbf34: update babel
+
 ## 2.1.2
 
 ### Patch Changes
